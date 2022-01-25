@@ -1,5 +1,3 @@
-# 如何编写 webpack loader 以及 plugin
-
 ## webpack 打包过程
 
 简单来看可以分为三部分，初始化阶段，打包执行阶段，文件输出阶段。
@@ -163,7 +161,168 @@ module.exports = function (source) {
 
 ### webpack plugin 实现
 
-webpack plugin 常用来是处理了编译生命周期的副作用
+webpack plugin 可以理解为是用来是处理了编译生命周期的副作用，如 HtmlWepackPlugin 在转译结束后输出产物期间新建 HTML 并添加打包后 js 模块的入口。
 
-配套学习仓库
+我们下面实现一个简单的 webpack plugin ，一个在输出产物的过程中控制台输出一个 HelloWorld 。
+
+```js
+module.exports = class HelloWorldPlugin {
+  apply(compiler) {
+    compiler.hooks.done.tap(
+      "Hello World Plugin",
+      () => {
+        console.log("Hello World!");
+      }
+    );
+  }
+};
+
+```
+还需要对其在配置中进行注册
+
+```js
+const path = require("path");
+
+const HelloWorldPlugin = require("./plugin/hello-world-plugin");
+
+module.exports = {
+  entry: "./src/index.js",
+  mode: "development",
+  output: {
+    filename: "main.js",
+    path: path.resolve(__dirname, "dist"),
+  },
+  module: {
+    rules: [
+      {
+        test: /\.js/,
+        use: [
+          {
+            loader: path.resolve(
+              __dirname,
+              "./loader/add-annotation-loader.js"
+            ),
+            options: {
+              author: "ChelesteWang",
+              date: new Date(),
+            },
+          },
+          {
+            loader: path.resolve(__dirname, "./loader/clear-console-loader.js"),
+          },
+        ],
+      },
+    ],
+  },
+  plugins: [new HelloWorldPlugin()],
+};
+
+```
+
+不同于 loader ，webpack plugin 需要导出一个带有 `apply` 方法的 class ，这个 `apply` 方法在安装插件时，会被 webpack compiler 调用一次。`apply` 方法可以接收一个 webpack compiler 对象的引用，从而可以在回调函数中访问到 compiler 对象。
+
+使用 compiler.hooks 方法可以给编译期间的每一个生命周期绑定事件，从而实现插件的效果
+
+![image.png](https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/fc586a5f16954741a52e85ca5528a56f~tplv-k3u1fbpfcp-watermark.image?)
+
+下面实现一个稍微复杂一点的插件，实现一个插件可以在执行结束后向 Assets 产物文件中新建一个 HTML 并调用 main.js
+
+```js
+module.exports = class {
+  options;
+
+  constructor(options) {
+    this.options = options;
+  }
+  apply(compiler) {
+    const { output, mode } = this.options;
+    compiler.hooks.emit.tapAsync("Simple Html Plugin", (compilation, cb) => {
+      const source =
+        mode === "development" ? "" : compilation.assets[output].source();
+      const src = mode === "development" ? `src='./${output}'` : "";
+      compilation.assets["index.html"] = {
+        source: function () {
+          return `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <script ${src}>
+          ${source}
+    </script>
+  </body>
+</html>
+          `;
+        },
+      };
+      cb();
+    });
+  }
+};
+```
+
+同样需要修改一下 webpack 的配置
+
+```js
+const path = require("path");
+
+const HelloWorldPlugin = require("./plugin/hello-world-plugin");
+const ListDepPlugin = require("./plugin/simple-html-plugin");
+
+module.exports = {
+  entry: "./src/index.js",
+  mode: "development",
+  output: {
+    filename: "main.js",
+    path: path.resolve(__dirname, "dist"),
+  },
+  module: {
+    rules: [
+      {
+        test: /\.js/,
+        use: [
+          {
+            loader: path.resolve(
+              __dirname,
+              "./loader/add-annotation-loader.js"
+            ),
+            options: {
+              author: "ChelesteWang",
+              date: new Date(),
+            },
+          },
+          {
+            loader: path.resolve(__dirname, "./loader/clear-console-loader.js"),
+          },
+        ],
+      },
+    ],
+  },
+  plugins: [new HelloWorldPlugin(), new ListDepPlugin({
+    output:"main.js",
+    mode:'development'
+  })],
+};
+```
+
+此插件代码仅供学习使用，代码功能实现较为简单，从中我们可以看到我们实现了打包后向产物中新建 html 并引入指定 js , 如果在生产环境就将代码注入到 script 标签中 , 如果是开发环境就用 src 引入的功能。
+
+这个插件中我们使用了 `compiler.hooks.emit.tapAsync()` 这个勾子函数，`emit` 在生命周期中为 `AsyncHook` 因此需要使用 `tapAsync` 的方式调用，我们传入了两个参数一个是 ’Simple Html Plugin‘ 作为标识，另一个是回调函数，回调函数同样有两个参数 `compilation` , `cb` ，`cb` 顾名思义是我们异步函数传入的回调函数。需要进行调用，一个 `Compilation` 对象表现了当前的模块资源、编译生成资源、变化的文件、以及被跟踪依赖的状态信息，简单来讲就是把本次打包编译的内容存到内存里。`Compilation` 对象也提供了插件需要自定义功能的回调，以供插件做自定义处理时选择使用拓展。
+
+总而言之一个 webpack plugin 基本包含以下几步：
+
+1.  一个 JavaScript 函数或者类
+1.  在函数原型（prototype）中定义一个注入`compiler`对象的`apply`方法。
+1.  `apply`函数中通过`compiler`插入指定的事件钩子，在钩子回调中拿到`compilation`对象
+1.  使用`compilation`操纵修改`webapack`内部实例数据。
+1.  异步插件，数据处理完后使用`callback`回调
+
+同样要注意一点 plugin 的注册顺序与调用顺序没有必然联系，主要在于插件挂载的不同生命周期。
+
+**配套学习仓库**
+
 [https://github.com/ChelesteWang/learn-webpack](https://github.com/ChelesteWang/learn-webpack)
