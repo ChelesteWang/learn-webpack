@@ -15,7 +15,7 @@
   \**********************/
 /***/ ((module) => {
 
-eval("\n    /**\n     * author : \"ChelesteWang\"\n     * Date: Mon Jan 24 2022 23:46:28 GMT+0800 (中国标准时间)\n     **/ \n    function add(a, b) {\n  ;\n  return a + b;\n}\n\nmodule.exports = add;\n\n\n//# sourceURL=webpack://learn-webpack/./src/index.js?");
+eval("\n    /**\n     * author : \"ChelesteWang\"\n     * Date: Tue Jan 25 2022 12:37:56 GMT+0800 (中国标准时间)\n     **/ \n    function add(a, b) {\n  ;\n  return a + b;\n}\n\nmodule.exports = add;\n\n\n//# sourceURL=webpack://learn-webpack/./src/index.js?");
 
 /***/ })
 

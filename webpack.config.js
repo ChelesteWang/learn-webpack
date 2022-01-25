@@ -1,5 +1,8 @@
 const path = require("path");
 
+const HelloWorldPlugin = require("./plugin/hello-world-plugin");
+const ListDepPlugin = require("./plugin/simple-html-plugin");
+
 module.exports = {
   entry: "./src/index.js",
   mode: "development",
@@ -29,4 +32,8 @@ module.exports = {
       },
     ],
   },
+  plugins: [new HelloWorldPlugin(), new ListDepPlugin({
+    output:"main.js",
+    mode:'development'
+  })],
 };
